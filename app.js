@@ -19,21 +19,12 @@ const isAuthenticated = (req,res, next)=>{
     if (req.cookies.token) { //you need cookie-parser for this to work
         console.log('Cookie saved:')
         console.log(req.cookies)
-        let parsedTokenValue = Buffer.from(req.cookies.token).toString('base64url')
-        console.log(`Parsed token value: ${parsedTokenValue}`)
+        console.log(`Token value: ${req.cookies.token}`)
 
         //auth
-        let found = db.find((user)=> user.id === parsedTokenValue)
-        if (found){
-            console.log('Already authenticated')
-            res.redirect('./html/dashboard.html')
-        }
-        else {
-            console.log('Invalid token')
-            req.cookies.token = ''//delete invalid token and proceed to login
-            res.type('text/html').send(`<h1>Incorrect credentials.</h1><a href='../login'>Try loggin in again.</a>`)
-        }
-        
+        let found = db.find((user)=> user.id === req.cookies.token)
+        if (found) next()
+        else res.redirect('/login')
     }
     else {
         console.log('Cookie not saved')
@@ -65,20 +56,27 @@ app.get("/", (req, res) => {
 })
     
 
-app.get('/login', isAuthenticated, (req, res)=>{ //isAuthenticated middleware
+app.get('/login', (req, res)=>{ 
     console.log(`GET request on /login at ${new Date(Date.now()).toUTCString()}`)
+
+    //user is already auth but goes to /login
+    if (req.cookies.token) {
+        let found = db.find((user)=> user.id === req.cookies.token)
+        if (found) res.redirect('/dashboard')
+        else req.cookies.token = ''
+    }
+    
     res.type('text/html').send(fs.readFileSync('./html/login.html'))
 })
 app.get('/register', (req, res)=>{
     console.log(`GET request on /register at ${new Date(Date.now()).toUTCString()}`)
     res.type('text/html').send(fs.readFileSync('./html/register.html'))
 })
-app.use('/dashboard', isAuthenticated, (req, res)=>{//isAuthenticated middleware
+app.get('/dashboard', isAuthenticated, (req, res)=>{//isAuthenticated middleware
     console.log(`GET request on /dashboard at ${new Date(Date.now()).toUTCString()}`)
     
-    let parsedTokenValue = Buffer.from(req.cookies.token).toString('utf-8')
-    const user = db.find((obj)=>obj.id === parsedTokenValue)
-    res.type('text/html').send(`<h1>Welcome, ${user.name}</h1><a href='/logout'>Log out</a>`)
+    const user = db.find((obj)=>obj.id === req.cookies.token)
+    res.type('text/html').send(`<h1>Welcome, ${user.user}</h1><a href='/logout'>Log out</a>`)
 })
 
 
@@ -114,10 +112,16 @@ app.post('/login', validateFormData, (req, res)=>{
     let userFound = db.find((obj)=>obj.user === req.body.user)
     console.log('db:',db)
     if (userFound && userFound.password === req.body.password) {
+        console.log('User found')
         res.cookie('token', userFound.id, {
             maxAge: 1000 * 60 * 60,
         })
         res.redirect('/dashboard')
+    }
+    //invalid
+    else {
+        console.log(`Invalid credentials:`, req.body)
+        res.type('text/html').send(`<h1>Invalid credentials. <a href='../login'>Try loggin in again</a>`)
     }
 })
 
