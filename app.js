@@ -7,74 +7,134 @@ const {randomBytes} = require('node:crypto')
 
 const cookieParser = require('cookie-parser')
 app.use(cookieParser())
+app.use(express.urlencoded({extended: false}))
 
-//mimic db
+
+//mimic a database 
 const db = []
 
-
-
-app.get("/", (req, res) => {    
-    console.log(`GET request on / at ${new Date(Date.now()).toUTCString()}`)
-
-    if (req.cookies.token) {
+//middleware auth
+const isAuthenticated = (req,res, next)=>{
+    console.log('Entering isAuthenticated middleware..')
+    if (req.cookies.token) { //you need cookie-parser for this to work
         console.log('Cookie saved:')
         console.log(req.cookies)
-        let parsedTokenValue = Buffer.from(req.cookies.token).toString('utf-8')
+        let parsedTokenValue = Buffer.from(req.cookies.token).toString('base64url')
         console.log(`Parsed token value: ${parsedTokenValue}`)
 
         //auth
         let found = db.find((user)=> user.id === parsedTokenValue)
         if (found){
+            console.log('Already authenticated')
             res.redirect('./html/dashboard.html')
         }
+        else {
+            console.log('Invalid token')
+            req.cookies.token = ''//delete invalid token and proceed to login
+            res.type('text/html').send(`<h1>Incorrect credentials.</h1><a href='../login'>Try loggin in again.</a>`)
+        }
+        
     }
     else {
         console.log('Cookie not saved')
+        res.redirect('/login')
+    }
+}
 
-        let newTokenValue = randomBytes(32).toString('utf-8')
-        console.log(`New token value: ${newTokenValue}`)
+const validateFormData = (req, res, next)=>{
+    console.log('Entering validateFormData middleware..')
+    console.log(req.body)
+    if (!req.body.user || !req.body.password || 
+        !/^\w{4,15}$/.test(req.body.user) || !/^\w{4,15}$/.test(req.body.password)
+    ) {
+        console.log('Invalid data, redirecting to loggin'); 
+        res.redirect('/login')
+        return;
+    } 
+    else {
+        console.log('Valid data')
+        next()
+    }
+}
 
-        db.push({
-            name: req.body.name,
-            password: req.body.password,
-            id: newTokenValue
-        })
 
-        res.cookie('token', newTokenValue, {
+app.get("/", (req, res) => {    
+    console.log(`GET request on / at ${new Date(Date.now()).toUTCString()}`)
+
+    res.type('text/html').send(fs.readFileSync('./html/home.html'))
+})
+    
+
+app.get('/login', isAuthenticated, (req, res)=>{ //isAuthenticated middleware
+    console.log(`GET request on /login at ${new Date(Date.now()).toUTCString()}`)
+    res.type('text/html').send(fs.readFileSync('./html/login.html'))
+})
+app.get('/register', (req, res)=>{
+    console.log(`GET request on /register at ${new Date(Date.now()).toUTCString()}`)
+    res.type('text/html').send(fs.readFileSync('./html/register.html'))
+})
+app.use('/dashboard', isAuthenticated, (req, res)=>{//isAuthenticated middleware
+    console.log(`GET request on /dashboard at ${new Date(Date.now()).toUTCString()}`)
+    
+    let parsedTokenValue = Buffer.from(req.cookies.token).toString('utf-8')
+    const user = db.find((obj)=>obj.id === parsedTokenValue)
+    res.type('text/html').send(`<h1>Welcome, ${user.name}</h1><a href='/logout'>Log out</a>`)
+})
+
+
+
+app.post('/register', validateFormData, (req, res)=>{
+    console.log(`POST request on /register at ${new Date(Date.now()).toUTCString()}`)
+    console.log(req.body)
+    
+    //user exists
+    if (db.find((obj)=>obj.user === req.body.user)) {
+        console.log(`User ${req.body.user} already exist`)
+        res.send(`User '${req.body.user}' already exists`)
+        return;
+    }
+
+    //create user
+    let newTokenValue = randomBytes(32).toString('base64url')
+    console.log(`New token value: ${newTokenValue}`)
+    db.push({
+        user: req.body.user,
+        password: req.body.password,
+        id: newTokenValue
+    })
+
+    res.type('text/html').send(fs.readFileSync('./html/register-success.html'))
+})
+
+app.post('/login', validateFormData, (req, res)=>{
+    console.log(`POST request on /login at ${new Date(Date.now()).toUTCString()}`)
+    console.log(req.body)
+
+    //validate credentials
+    let userFound = db.find((obj)=>obj.user === req.body.user)
+    console.log('db:',db)
+    if (userFound && userFound.password === req.body.password) {
+        res.cookie('token', userFound.id, {
             maxAge: 1000 * 60 * 60,
         })
+        res.redirect('/dashboard')
     }
-    
-    app.get('/register', (req, res)=>{
-        
-    })
+})
 
-    app.get('/login', (req, res)=>{
-        res.type('text/html').send(fs.readFileSync('./html/login.html'))
-    })
-    
-    
-});
+app.get('/logout', (req, res)=>{
+    res.clearCookie('token')
+    res.redirect('/login')
+})
+
+
 
 const server = app.listen(port, () => console.log(`Example app listening on port ${port}!`));
 
+
+
+//this is the hello world from Render
 // server.keepAliveTimeout = 120 * 1000;
 // server.headersTimeout = 120 * 1000;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 // const html = `
 // <!DOCTYPE html>

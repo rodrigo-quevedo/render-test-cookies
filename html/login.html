@@ -6,6 +6,14 @@
     <title>Login</title>
 </head>
 <body>
-    
+    <!-- <base href="http://localhost:3001"> -->
+    <form action="../login" method="POST">
+        <label for="user">User:</label>
+        <input type="text" name="user" id="user" required>
+        <label for="password">Password:</label>
+        <input type="password" name="password" id="password" required>
+        <input type="submit" value="Log In">
+        <a href="../register">Or you can register here</a>
+    </form>
 </body>
 </html>
